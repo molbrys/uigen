@@ -12,21 +12,17 @@ export function PreviewFrame() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { getAllFiles, refreshTrigger } = useFileSystem();
   const [error, setError] = useState<string | null>(null);
-  const [entryPoint, setEntryPoint] = useState<string>("/App.jsx");
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
+  // Use refs so changes don't trigger extra effect re-runs that reset the iframe
+  const entryPointRef = useRef<string>("/App.jsx");
+  const isFirstLoadRef = useRef(true);
 
   useEffect(() => {
     const updatePreview = () => {
       try {
         const files = getAllFiles();
 
-        // Clear error first when we have files
-        if (files.size > 0 && error) {
-          setError(null);
-        }
-
         // Find the entry point - look for App.jsx, App.tsx, index.jsx, or index.tsx
-        let foundEntryPoint = entryPoint;
+        let foundEntryPoint = entryPointRef.current;
         const possibleEntries = [
           "/App.jsx",
           "/App.tsx",
@@ -36,11 +32,11 @@ export function PreviewFrame() {
           "/src/App.tsx",
         ];
 
-        if (!files.has(entryPoint)) {
+        if (!files.has(entryPointRef.current)) {
           const found = possibleEntries.find((path) => files.has(path));
           if (found) {
             foundEntryPoint = found;
-            setEntryPoint(found);
+            entryPointRef.current = found;
           } else if (files.size > 0) {
             // Just use the first .jsx/.tsx file found
             const firstJSX = Array.from(files.keys()).find(
@@ -48,13 +44,13 @@ export function PreviewFrame() {
             );
             if (firstJSX) {
               foundEntryPoint = firstJSX;
-              setEntryPoint(firstJSX);
+              entryPointRef.current = firstJSX;
             }
           }
         }
 
         if (files.size === 0) {
-          if (isFirstLoad) {
+          if (isFirstLoadRef.current) {
             setError("firstLoad");
           } else {
             setError("No files to preview");
@@ -63,9 +59,7 @@ export function PreviewFrame() {
         }
 
         // We have files, so it's no longer the first load
-        if (isFirstLoad) {
-          setIsFirstLoad(false);
-        }
+        isFirstLoadRef.current = false;
 
         if (!foundEntryPoint || !files.has(foundEntryPoint)) {
           setError(
@@ -96,7 +90,10 @@ export function PreviewFrame() {
     };
 
     updatePreview();
-  }, [refreshTrigger, getAllFiles, entryPoint, error, isFirstLoad]);
+  // Only re-run when files actually change, not when error/entryPoint/isFirstLoad state changes.
+  // error, entryPoint, and isFirstLoad are managed via refs or excluded to prevent the effect
+  // from resetting the iframe (and losing toggle/interaction state) on every state update.
+  }, [refreshTrigger, getAllFiles]);
 
   if (error) {
     if (error === "firstLoad") {
